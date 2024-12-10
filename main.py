@@ -1,5 +1,9 @@
 from PySide6.QtWidgets import QApplication, QWidget
-from ui_login import Ui_Login  # Importa la clase generada automáticamente
+from Interfaces.ui_login import Ui_Login  # Importa la clase generada automáticamente
+from Interfaces.ui_menu import Ui_MainWindowMenu as Menu
+from Interfaces.ui_registro import Ui_FormRegistro
+from Interfaces.ui_juego import Ui_FormJuego
+from Interfaces.ui_estadistica import Ui_FormEstats
 
 class LoginWindow(QWidget):  # Hereda de QWidget, ya que tu archivo generado es un widget
     def __init__(self):
@@ -23,6 +27,10 @@ class LoginWindow(QWidget):  # Hereda de QWidget, ya que tu archivo generado es 
 
     def handle_register(self):
         print("Registro de nuevo usuario")
+
+
+
+
 
 if __name__ == "__main__":
     import sys
