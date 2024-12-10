@@ -267,13 +267,22 @@ class LobbyWindow(QWidget):
             QMessageBox.critical(self, "Error del Servidor", f"Fallo al iniciar el servidor: {e}")
 
     def aceptar_conexion(self):
-        conn, _ = self.server_socket.accept()
-        self.connection_accepted = True
-        self.client_socket = conn
-        QMessageBox.information(self, "Conexión", "Un jugador se ha conectado.")
+        try:
+            conn, _ = self.server_socket.accept()
+            self.connection_accepted = True
+            self.client_socket = conn
+            self.ui.pushButton.setEnabled(True)  # Habilitar botón para iniciar el juego
+            QMessageBox.information(self, "Conexión", "Un jugador se ha conectado.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al aceptar la conexión: {e}")
 
     def iniciar_juego_host(self):
         if self.connection_accepted and self.server_socket:
+            # Verificar que el socket cliente esté conectado
+            if not self.client_socket:
+                QMessageBox.warning(self, "Advertencia", "No hay conexión con el cliente.")
+                return
+
             try:
                 self.client_socket.sendall("INICIAR_JUEGO".encode())
                 self.iniciar_juego(self.client_socket, is_host=True)
@@ -313,9 +322,14 @@ class LobbyWindow(QWidget):
                 break
 
     def iniciar_juego(self, socket_instance, is_host):
-        self.juego_ventana = JuegoWindow(socket_instance, is_host)
-        self.juego_ventana.show()
-        self.close()
+        try:
+            if not socket_instance:
+                raise ValueError("Socket de juego no válido. La conexión no se estableció correctamente.")
+            self.juego_ventana = JuegoWindow(socket_instance, is_host)
+            self.juego_ventana.show()
+            self.close()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo iniciar la ventana del juego: {e}")
 
     def obtener_interfaces_de_red(self):
         interfaces = {}
