@@ -227,8 +227,10 @@ class LobbyWindow(QWidget):
         self.ui.setupUi(self)
         self.ui.btnCrearPartida.clicked.connect(self.crear_partida)
         self.ui.btnUnirse.clicked.connect(self.unirse_a_partida)
+        self.ui.pushButton.clicked.connect(self.iniciar_juego_host)
         self.server_socket = None
         self.client_socket = None
+        self.connection_accepted = False
         self.fixed_port = 5051
 
     def crear_partida(self):
@@ -266,8 +268,19 @@ class LobbyWindow(QWidget):
 
     def aceptar_conexion(self):
         conn, _ = self.server_socket.accept()
+        self.connection_accepted = True
+        self.client_socket = conn
         QMessageBox.information(self, "Conexión", "Un jugador se ha conectado.")
-        self.iniciar_juego(conn, is_host=True)
+
+    def iniciar_juego_host(self):
+        if self.connection_accepted and self.server_socket:
+            try:
+                self.client_socket.sendall("INICIAR_JUEGO".encode())
+                self.iniciar_juego(self.client_socket, is_host=True)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo iniciar el juego: {e}")
+        else:
+            QMessageBox.warning(self, "Advertencia", "Aún no hay un jugador conectado.")
 
     def unirse_a_partida(self):
         server_info = self.ui.lineEdit.text().strip()
@@ -281,11 +294,23 @@ class LobbyWindow(QWidget):
 
                 QMessageBox.information(self, "Cliente",
                                         f"Conectado exitosamente al servidor:\nIP: {ip_address}\nPuerto: {port}")
-                self.iniciar_juego(self.client_socket, is_host=False)
+
+                threading.Thread(target=self.esperar_inicio_juego, daemon=True).start()
             except Exception as e:
                 QMessageBox.critical(self, "Error de Cliente", f"No se pudo conectar al servidor:\n{e}")
         else:
             QMessageBox.warning(self, "Error", "Por favor, ingrese una IP y puerto válidos en el formato IP:Puerto.")
+
+    def esperar_inicio_juego(self):
+        while True:
+            try:
+                data = self.client_socket.recv(1024)
+                if data.decode() == "INICIAR_JUEGO":
+                    self.iniciar_juego(self.client_socket, is_host=False)
+                    break
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error al esperar inicio del juego: {e}")
+                break
 
     def iniciar_juego(self, socket_instance, is_host):
         self.juego_ventana = JuegoWindow(socket_instance, is_host)
