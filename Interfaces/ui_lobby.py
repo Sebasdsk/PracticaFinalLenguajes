@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'lobbyTACUnW.ui'
+## Form generated from reading UI file 'lobbyCtYrYw.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.8.0
 ##
@@ -45,6 +45,9 @@ class Ui_FormLobby(object):
         self.pushButton.setObjectName(u"pushButton")
         self.pushButton.setEnabled(False)
         self.pushButton.setGeometry(QRect(300, 370, 75, 41))
+        self.lbIdGenerado = QLabel(FormLobby)
+        self.lbIdGenerado.setObjectName(u"lbIdGenerado")
+        self.lbIdGenerado.setGeometry(QRect(60, 10, 121, 16))
 
         self.retranslateUi(FormLobby)
 
@@ -58,5 +61,6 @@ class Ui_FormLobby(object):
         self.btnSalir.setText(QCoreApplication.translate("FormLobby", u"Salir", None))
         self.label.setText(QCoreApplication.translate("FormLobby", u"ID de la partida", None))
         self.pushButton.setText(QCoreApplication.translate("FormLobby", u"Iniciar", None))
+        self.lbIdGenerado.setText("")
     # retranslateUi
 
