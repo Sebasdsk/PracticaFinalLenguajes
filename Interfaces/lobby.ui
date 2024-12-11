@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>525</width>
-    <height>443</height>
+    <width>535</width>
+    <height>230</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -42,8 +42,8 @@
   <widget class="QPushButton" name="btnSalir">
    <property name="geometry">
     <rect>
-     <x>80</x>
-     <y>370</y>
+     <x>220</x>
+     <y>150</y>
      <width>91</width>
      <height>41</height>
     </rect>
@@ -73,32 +73,6 @@
    </property>
    <property name="text">
     <string>ID de la partida</string>
-   </property>
-  </widget>
-  <widget class="QListWidget" name="listWidget">
-   <property name="geometry">
-    <rect>
-     <x>120</x>
-     <y>140</y>
-     <width>256</width>
-     <height>192</height>
-    </rect>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="pushButton">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
-   <property name="geometry">
-    <rect>
-     <x>300</x>
-     <y>370</y>
-     <width>75</width>
-     <height>41</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string>Iniciar</string>
    </property>
   </widget>
   <widget class="QLabel" name="lbIdGenerado">
