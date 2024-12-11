@@ -172,24 +172,24 @@ class JuegoWindow(QWidget, Ui_FormJuego):
 
     def send_move(self, button):
         try:
-            if hasattr(self, "transitioning") and self.transitioning:
-                # No enviar movimientos si estamos en transición de ventanas
-                return
             index = [(row.index(button), col) for col, row in enumerate(self.buttons) if button in row][0]
-            self.socket_instance.sendall(f"{index[0]},{index[1]}".encode())
+            row, col = index
+            # Invierte coordenadas si es necesario antes de enviarlas
+            # row = 2 - row  # Descomenta si necesitas invertir filas
+            # col = 2 - col  # Descomenta si necesitas invertir columnas
+            self.socket_instance.sendall(f"{row},{col}".encode())
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo enviar el movimiento: {e}")
 
     def receive_data(self):
         while True:
             try:
-                # Si estamos en transición (cambiando de ventana), pausar la recepción de datos
-                if hasattr(self, "transitioning") and self.transitioning:
-                    continue
-
                 data = self.socket_instance.recv(1024)
                 if data:
                     row, col = map(int, data.decode().split(","))
+                    # Invierte coordenadas si es necesario al recibirlas
+                    # row = 2 - row  # Descomenta si necesitas invertir filas
+                    # col = 2 - col  # Descomenta si necesitas invertir columnas
                     button = self.buttons[row][col]
                     self.handle_turn(button)
                     self.my_turn = True
