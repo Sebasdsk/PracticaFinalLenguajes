@@ -174,9 +174,8 @@ class JuegoWindow(QWidget, Ui_FormJuego):
         try:
             index = [(row.index(button), col) for col, row in enumerate(self.buttons) if button in row][0]
             row, col = index
-            # Invierte coordenadas si es necesario antes de enviarlas
-            # row = 2 - row  # Descomenta si necesitas invertir filas
-            # col = 2 - col  # Descomenta si necesitas invertir columnas
+            # Invertir la fila antes de enviar
+            row = 2 - row  # Invertir la fila (reflejar)
             self.socket_instance.sendall(f"{row},{col}".encode())
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo enviar el movimiento: {e}")
@@ -187,9 +186,8 @@ class JuegoWindow(QWidget, Ui_FormJuego):
                 data = self.socket_instance.recv(1024)
                 if data:
                     row, col = map(int, data.decode().split(","))
-                    # Invierte coordenadas si es necesario al recibirlas
-                    # row = 2 - row  # Descomenta si necesitas invertir filas
-                    # col = 2 - col  # Descomenta si necesitas invertir columnas
+                    # Invertir la fila al recibir
+                    row = 2 - row  # Invertir la fila (reflejar)
                     button = self.buttons[row][col]
                     self.handle_turn(button)
                     self.my_turn = True
