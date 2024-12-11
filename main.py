@@ -154,7 +154,11 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             threading.Thread(target=self.receive_data, daemon=True).start()
 
     def register_match(self, player1, player2, winner):
-        """Registra las estadísticas de la partida en el Web Service."""
+        """Registra las estadísticas de la partida en el Web Service. Solo ejecutado por el host."""
+        if not self.is_host:
+            print("El cliente no puede registrar las estadísticas en el Web Service.")
+            return  # Prevención: Solo el host debe hacer esto
+
         url = "http://127.0.0.1:5000/register_match"  # URL del web service
         payload = {
             "player1": player1,
@@ -219,40 +223,38 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             QMessageBox.critical(self, "Error", f"No se pudo enviar el movimiento: {e}")
 
     def receive_data(self):
-        """Recibe datos del oponente, sincronizando nombres y jugadas."""
+        """Recibe datos del oponente, sincronizando nombres, jugadas y resultados."""
         try:
-            if not self.usuario_oponente:  # Ejecutar sincronización de nombres solo una vez
+            if not self.usuario_oponente:  # Ejecutar la sincronización al inicio
                 if self.is_host:
-                    # El host envía primero su nombre de usuario y recibe el del cliente
                     self.socket_instance.sendall(self.usuario_local.encode())
                     self.usuario_oponente = self.socket_instance.recv(1024).decode()
                 else:
-                    # El cliente recibe primero el nombre del host y luego envía su nombre
                     self.usuario_oponente = self.socket_instance.recv(1024).decode()
                     self.socket_instance.sendall(self.usuario_local.encode())
-                print(
-                    f"Sincronización de nombres completada: Local: {self.usuario_local}, Oponente: {self.usuario_oponente}")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error al sincronizar nombres: {e}")
+                print(f"Sincronización completada: {self.usuario_local} vs {self.usuario_oponente}")
 
-        # Flujo continuo para recibir datos del juego
-        while True:
-            try:
-                data = self.socket_instance.recv(1024)
-                if data:
-                    row, col = map(int, data.decode().split(","))
+            # Mantener la conexión activa para recibir datos o resultados
+            while True:
+                data = self.socket_instance.recv(1024).decode()
+                if data.startswith("RESULT:"):  # Procesar resultado si es necesario
+                    self.recibir_resultado(data)
+                    break  # Detener después de recibir el resultado final
+
+                elif data:  # Datos de movimiento
+                    row, col = map(int, data.split(","))
                     row = 2 - row  # Reflejo vertical
                     col = 2 - col  # Reflejo horizontal
                     button = self.buttons[row][col]
                     self.handle_turn(button)
                     self.my_turn = True
+
                 else:
                     print("El servidor/cliente cerró la conexión.")
                     break
-            except Exception as e:
-                print(f"Error al recibir datos: {e}")
-                break
-        self.close_socket()
+        except Exception as e:
+            print(f"Error al recibir datos: {e}")
+            self.close_socket()
 
     def disable_all_buttons(self):
         for row in self.buttons:
@@ -270,17 +272,61 @@ class JuegoWindow(QWidget, Ui_FormJuego):
         self.my_turn = self.is_host
 
     def check_winner(self):
+        """Verifica si hay un ganador o empate y define el flujo según sea host o cliente."""
+        winner_detected = None
+
+        # Reglas de validación de filas, columnas y diagonales
         for i in range(3):
             if self.buttons[i][0].text() == self.buttons[i][1].text() == self.buttons[i][2].text() != "":
-                return True
+                winner_detected = self.buttons[i][0].text()
             if self.buttons[0][i].text() == self.buttons[1][i].text() == self.buttons[2][i].text() != "":
-                return True
+                winner_detected = self.buttons[0][i].text()
 
         if self.buttons[0][0].text() == self.buttons[1][1].text() == self.buttons[2][2].text() != "":
-            return True
+            winner_detected = self.buttons[0][0].text()
         if self.buttons[0][2].text() == self.buttons[1][1].text() == self.buttons[2][0].text() != "":
-            return True
-        return False
+            winner_detected = self.buttons[0][2].text()
+
+        # Regla para empate
+        is_draw = self.times == 9 and not winner_detected
+
+        # Solo el host realiza las acciones finales
+        if self.is_host:
+            if winner_detected:
+                winner_name = self.usuario_local if winner_detected == "X" else self.usuario_oponente
+                self.enviar_resultado(winner_name)  # Enviar resultado al cliente
+                self.register_match(self.usuario_local, self.usuario_oponente, winner_name)  # Registrar en el WS
+            elif is_draw:
+                self.enviar_resultado("draw")  # Enviar empate al cliente
+                self.register_match(self.usuario_local, self.usuario_oponente, "draw")  # Registrar empate en el WS
+
+        return winner_detected or is_draw
+
+    def enviar_resultado(self, resultado):
+        """Envía el resultado final del juego al cliente desde el host."""
+        try:
+            if self.is_host:
+                message = f"RESULT:{resultado}"
+                self.socket_instance.sendall(message.encode())  # Enviar el resultado
+                self.mostrar_resultado(resultado)  # Mostrar en tu propia pantalla
+        except Exception as e:
+            print(f"Error al enviar el resultado: {e}")
+
+    def recibir_resultado(self, message):
+        """Recibe el resultado del host y lo aplica localmente."""
+        if message.startswith("RESULT:"):
+            resultado = message.split(":")[1]
+            self.mostrar_resultado(resultado)
+
+    def mostrar_resultado(self, resultado):
+        """Muestra en la interfaz el resultado final."""
+        if resultado == "draw":
+            self.lblGanador.setText("Empate")
+        else:
+            self.lblGanador.setText(f"{resultado} Ganó!")
+
+        self.disable_all_buttons()
+
 
     def close_socket(self):
         """Cerrar el socket de forma segura."""
