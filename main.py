@@ -187,7 +187,7 @@ class JuegoWindow(QWidget, Ui_FormJuego):
                     self.handle_turn(button)
                     self.my_turn = True
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"Error al recibir datos: {e}")
+                print(f"Error al recibir datos: {e}")
                 break
 
     def disable_all_buttons(self):
