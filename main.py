@@ -172,20 +172,23 @@ class JuegoWindow(QWidget, Ui_FormJuego):
 
     def send_move(self, button):
         try:
+            if hasattr(self, "transitioning") and self.transitioning:
+                # No enviar movimientos si estamos en transición de ventanas
+                return
             index = [(row.index(button), col) for col, row in enumerate(self.buttons) if button in row][0]
-            if self.socket_instance:
-                self.socket_instance.sendall(f"{index[0]},{index[1]}".encode())
+            self.socket_instance.sendall(f"{index[0]},{index[1]}".encode())
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo enviar el movimiento: {e}")
 
     def receive_data(self):
         while True:
             try:
+                # Si estamos en transición (cambiando de ventana), pausar la recepción de datos
+                if hasattr(self, "transitioning") and self.transitioning:
+                    continue
+
                 data = self.socket_instance.recv(1024)
                 if data:
-                    if data == b"END":
-                        print("La conexión fue cerrada por el otro lado.")
-                        break
                     row, col = map(int, data.decode().split(","))
                     button = self.buttons[row][col]
                     self.handle_turn(button)
@@ -193,11 +196,8 @@ class JuegoWindow(QWidget, Ui_FormJuego):
                 else:
                     print("El servidor/cliente cerró la conexión.")
                     break
-            except socket.error as e:
-                print(f"Error al recibir datos: {e}")
-                break
             except Exception as e:
-                print(f"Error inesperado al recibir datos: {e}")
+                print(f"Error al recibir datos: {e}")
                 break
         self.close_socket()
 
@@ -325,15 +325,22 @@ class LobbyWindow(QWidget):
             QMessageBox.warning(self, "Error", "Por favor, ingrese una IP y puerto válidos en el formato IP:Puerto.")
 
     def iniciar_juego(self, socket_instance, is_host=True):
-        """Inicia la ventana del juego con el socket proporcionado."""
         try:
             if not socket_instance:
                 raise ValueError("Socket de juego no válido. La conexión no se estableció correctamente.")
+
+            # Señaliza que estás en transición hacia la ventana del juego
+            self.transitioning = True
+
             self.juego_ventana = JuegoWindow(socket_instance, is_host)
             self.juego_ventana.show()
-            self.close()  # Cierra el lobby
+            self.hide()
+
+            # Una vez que la nueva ventana se muestra completamente, desactiva el flag
+            self.transitioning = False
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo iniciar la ventana del juego: {e}")
+
 
     def obtener_interfaces_de_red(self):
         """Obtiene las interfaces de red activas con direcciones IPv4 válidas."""
