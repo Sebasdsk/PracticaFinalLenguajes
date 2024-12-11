@@ -182,13 +182,20 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             try:
                 data = self.socket_instance.recv(1024)
                 if data:
+                    if data == b"END":
+                        print("La conexión fue cerrada por el otro lado.")
+                        break
                     row, col = map(int, data.decode().split(","))
                     button = self.buttons[row][col]
                     self.handle_turn(button)
                     self.my_turn = True
+                else:
+                    print("El servidor/cliente cerró la conexión.")
+                    break
             except Exception as e:
                 print(f"Error al recibir datos: {e}")
                 break
+        self.close_socket()  # Cerrar el socket al terminar el bucle
 
     def disable_all_buttons(self):
         for row in self.buttons:
@@ -218,6 +225,14 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             return True
         return False
 
+    def close_socket(self):
+        """Cerrar el socket de forma segura."""
+        try:
+            if self.socket_instance:
+                self.socket_instance.shutdown(socket.SHUT_RDWR)
+                self.socket_instance.close()
+        except OSError as e:
+            print(f"Error al cerrar el socket: {e}")
 
 class LobbyWindow(QWidget):
     """Ventana del lobby del juego."""
