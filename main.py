@@ -30,16 +30,18 @@ DB_CONFIG = {
 class MenuPrincipal(QMainWindow):
     """Ventana principal del menú después de iniciar sesión."""
 
-    def __init__(self):
+    def __init__(self, usuario):
         super().__init__()
         self.ui = MenuPrincipalUI()
         self.ui.setupUi(self)
+        self.usuario = usuario  # Guardamos el nombre del usuario que inició sesión
         self.ui.btnJugar.clicked.connect(self.abrir_ventana_lobby)
 
     def abrir_ventana_lobby(self):
-        """Abre la ventana de lobby."""
-        self.lobby_ventana = LobbyWindow()
+        """Abre la ventana de lobby y pasa el nombre del usuario."""
+        self.lobby_ventana = LobbyWindow(self.usuario)
         self.lobby_ventana.show()
+        self.close()  # Cerramos esta ventana
 
 
 class LoginWindow(QWidget):
@@ -78,14 +80,15 @@ class LoginWindow(QWidget):
 
             if result:
                 QMessageBox.information(self, "Login", "Inicio de sesión exitoso.")
-                self.abrir_menu_principal()
+                self.abrir_menu_principal(usuario)  # Pasamos el nombre del usuario
             else:
                 QMessageBox.warning(self, "Login", "Usuario o contraseña incorrectos.")
 
-    def abrir_menu_principal(self):
-        """Abre el menú principal."""
-        self.menu_ventana = MenuPrincipal()
+    def abrir_menu_principal(self, usuario):
+        """Abre el menú principal y pasa el nombre del usuario."""
+        self.menu_ventana = MenuPrincipal(usuario)
         self.menu_ventana.show()
+        self.close()
 
     def _get_db_connection(self):
         """Devuelve una conexión a la base de datos usando pymysql."""
@@ -125,11 +128,13 @@ class RegisterWindow(QWidget):
 class JuegoWindow(QWidget, Ui_FormJuego):
     """Ventana para el juego Tic-Tac-Toe."""
 
-    def __init__(self, socket_instance=None, is_host=False):
+    def __init__(self, socket_instance=None, is_host=False,usuario_local=""):
         super().__init__()
         self.setupUi(self)
         self.turn = 0
         self.times = 0
+        self.usuario_local = usuario_local.strip()  # Asegurarse de limpiar espacios en blanco
+        self.usuario_oponente = None  # Inicialmente desconocido (lo obtenemos al conectar)
         self.buttons = [
             [self.pushButton, self.pushButton_2, self.pushButton_3],
             [self.pushButton_4, self.pushButton_5, self.pushButton_6],
@@ -157,6 +162,7 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             "winner": winner,
         }
 
+        print(f"Intentando registrar match con los datos: {payload}")  # Depuración
         try:
             response = requests.post(url, json=payload)
             if response.status_code == 201:
@@ -183,23 +189,23 @@ class JuegoWindow(QWidget, Ui_FormJuego):
         self.times += 1
         self.my_turn = False
 
+        # Validar sincronización de usuarios antes de continuar
+        if not self.usuario_local or not self.usuario_oponente:
+            QMessageBox.critical(self, "Error", "No se pudo encontrar el nombre de un jugador.")
+            return  # Detener para evitar fallos
+
         if self.check_winner():
-            winner = "X" if self.turn == 1 else "O"
+            winner = self.usuario_local if self.turn == 1 else self.usuario_oponente
             self.lblGanador.setText(f"{winner} Ganó")
             self.disable_all_buttons()
 
-            # Registrar las estadísticas de la partida
-            player1 = "Usuario1"  # Reemplaza con los nombres reales
-            player2 = "Usuario2"
-            self.register_match(player1, player2, winner)
+            # Registrar las estadísticas de la partida usando nombres reales
+            self.register_match(self.usuario_local, self.usuario_oponente, winner)
 
         elif self.times == 9:
             self.lblGanador.setText("Empate")
-
-            # Registrar empate
-            player1 = "Usuario1"  # Reemplaza con los nombres reales
-            player2 = "Usuario2"
-            self.register_match(player1, player2, "draw")
+            # Registrar un empate
+            self.register_match(self.usuario_local, self.usuario_oponente, "draw")
 
     def send_move(self, button):
         try:
@@ -213,15 +219,30 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             QMessageBox.critical(self, "Error", f"No se pudo enviar el movimiento: {e}")
 
     def receive_data(self):
+        """Recibe datos del oponente, sincronizando nombres y jugadas."""
+        try:
+            if not self.usuario_oponente:  # Ejecutar sincronización de nombres solo una vez
+                if self.is_host:
+                    # El host envía primero su nombre de usuario y recibe el del cliente
+                    self.socket_instance.sendall(self.usuario_local.encode())
+                    self.usuario_oponente = self.socket_instance.recv(1024).decode()
+                else:
+                    # El cliente recibe primero el nombre del host y luego envía su nombre
+                    self.usuario_oponente = self.socket_instance.recv(1024).decode()
+                    self.socket_instance.sendall(self.usuario_local.encode())
+                print(
+                    f"Sincronización de nombres completada: Local: {self.usuario_local}, Oponente: {self.usuario_oponente}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al sincronizar nombres: {e}")
+
+        # Flujo continuo para recibir datos del juego
         while True:
             try:
                 data = self.socket_instance.recv(1024)
                 if data:
                     row, col = map(int, data.decode().split(","))
-                    print(f"Recibido antes de ajuste: row={row}, col={col}")  # Depuración
                     row = 2 - row  # Reflejo vertical
                     col = 2 - col  # Reflejo horizontal
-                    print(f"Recibido después de ajuste: row={row}, col={col}")  # Depuración
                     button = self.buttons[row][col]
                     self.handle_turn(button)
                     self.my_turn = True
@@ -281,10 +302,11 @@ class LobbyWindow(QWidget):
     # Definimos una señal personalizada para manejar la conexión en el hilo principal
     conexion_exitosa = Signal(object)
 
-    def __init__(self):
+    def __init__(self, usuario):
         super().__init__()
         self.ui = UiLobby()
         self.ui.setupUi(self)
+        self.usuario = usuario  # Guardamos el nombre del usuario
         self.ui.btnCrearPartida.clicked.connect(self.crear_partida)
         self.ui.btnUnirse.clicked.connect(self.unirse_a_partida)
         self.server_socket = None
@@ -364,7 +386,7 @@ class LobbyWindow(QWidget):
             # Señaliza que estás en transición hacia la ventana del juego
             self.transitioning = True
 
-            self.juego_ventana = JuegoWindow(socket_instance, is_host)
+            self.juego_ventana = JuegoWindow(socket_instance, is_host, self.usuario)
             self.juego_ventana.show()
             self.hide()
 
