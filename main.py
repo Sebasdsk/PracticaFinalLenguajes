@@ -2,6 +2,7 @@ import pymysql
 import socket
 import netifaces
 import threading
+import requests
 from PySide6.QtWidgets import QApplication, QWidget, QMainWindow, QMessageBox, QInputDialog
 from PySide6.QtCore import Signal, QObject
 from Interfaces.ui_login import Ui_Login
@@ -147,6 +148,24 @@ class JuegoWindow(QWidget, Ui_FormJuego):
         if self.socket_instance:
             threading.Thread(target=self.receive_data, daemon=True).start()
 
+    def register_match(self, player1, player2, winner):
+        """Registra las estadísticas de la partida en el Web Service."""
+        url = "http://127.0.0.1:5000/register_match"  # URL del web service
+        payload = {
+            "player1": player1,
+            "player2": player2,
+            "winner": winner,
+        }
+
+        try:
+            response = requests.post(url, json=payload)
+            if response.status_code == 201:
+                print("Estadística registrada exitosamente.")
+            else:
+                print(f"Error al registrar estadística: {response.json()}")
+        except requests.RequestException as e:
+            print(f"Error de conexión al Web Service: {e}")
+
     def button_clicked(self):
         if not self.my_turn:
             QMessageBox.warning(self, "Turno", "Espera tu turno.")
@@ -165,17 +184,30 @@ class JuegoWindow(QWidget, Ui_FormJuego):
         self.my_turn = False
 
         if self.check_winner():
-            self.lblGanador.setText(f"{'O' if self.turn == 0 else 'X'} Ganó")
+            winner = "X" if self.turn == 1 else "O"
+            self.lblGanador.setText(f"{winner} Ganó")
             self.disable_all_buttons()
+
+            # Registrar las estadísticas de la partida
+            player1 = "Usuario1"  # Reemplaza con los nombres reales
+            player2 = "Usuario2"
+            self.register_match(player1, player2, winner)
+
         elif self.times == 9:
             self.lblGanador.setText("Empate")
+
+            # Registrar empate
+            player1 = "Usuario1"  # Reemplaza con los nombres reales
+            player2 = "Usuario2"
+            self.register_match(player1, player2, "draw")
 
     def send_move(self, button):
         try:
             index = [(row.index(button), col) for col, row in enumerate(self.buttons) if button in row][0]
             row, col = index
-            # Invertir la fila antes de enviar
-            row = 2 - row  # Invertir la fila (reflejar)
+            row = 2 - row  # Reflejo vertical
+            col = 2 - col  # Reflejo horizontal
+            print(f"Enviando: row={row}, col={col}")  # Depuración
             self.socket_instance.sendall(f"{row},{col}".encode())
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo enviar el movimiento: {e}")
@@ -186,8 +218,10 @@ class JuegoWindow(QWidget, Ui_FormJuego):
                 data = self.socket_instance.recv(1024)
                 if data:
                     row, col = map(int, data.decode().split(","))
-                    # Invertir la fila al recibir
-                    row = 2 - row  # Invertir la fila (reflejar)
+                    print(f"Recibido antes de ajuste: row={row}, col={col}")  # Depuración
+                    row = 2 - row  # Reflejo vertical
+                    col = 2 - col  # Reflejo horizontal
+                    print(f"Recibido después de ajuste: row={row}, col={col}")  # Depuración
                     button = self.buttons[row][col]
                     self.handle_turn(button)
                     self.my_turn = True
