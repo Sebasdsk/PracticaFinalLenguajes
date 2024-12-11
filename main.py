@@ -128,7 +128,7 @@ class RegisterWindow(QWidget):
 class JuegoWindow(QWidget, Ui_FormJuego):
     """Ventana para el juego Tic-Tac-Toe."""
 
-    def __init__(self, socket_instance=None, is_host=False,usuario_local=""):
+    def __init__(self, socket_instance=None, is_host=False, usuario_local=""):
         super().__init__()
         self.setupUi(self)
         self.turn = 0
@@ -146,10 +146,12 @@ class JuegoWindow(QWidget, Ui_FormJuego):
         self.is_host = is_host
         self.my_turn = is_host
 
+        # Configurar eventos de clic en los botones
         for row in self.buttons:
             for button in row:
                 button.clicked.connect(self.button_clicked)
 
+        # Encender un hilo para recibir datos del oponente si el socket está activo
         if self.socket_instance:
             threading.Thread(target=self.receive_data, daemon=True).start()
 
@@ -177,26 +179,28 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             print(f"Error de conexión al Web Service: {e}")
 
     def button_clicked(self):
+        """Se ejecuta cuando un jugador realiza un movimiento."""
         if not self.my_turn:
-            QMessageBox.warning(self, "Turno", "Espera tu turno.")
+            QMessageBox.warning(self, "Turno", "Espera tu turno.")  # Control de turno
             return
 
         button = self.sender()
         if button.isEnabled():
+            # Procesar el turno y enviar el movimiento al oponente
             self.handle_turn(button)
             self.send_move(button)
 
     def handle_turn(self, button):
+        """Gestiona jugadas locales, actualiza el tablero y verifica ganador/empate."""
         button.setEnabled(False)
         button.setText("X" if self.turn == 0 else "O")
         self.turn = 1 - self.turn
         self.times += 1
-        self.my_turn = False
+        self.my_turn = False  # El turno cambió al oponente
 
-        # Validar sincronización de usuarios antes de continuar
         if not self.usuario_local or not self.usuario_oponente:
             QMessageBox.critical(self, "Error", "No se pudo encontrar el nombre de un jugador.")
-            return  # Detener para evitar fallos
+            return  # Validación de sincronización de usuarios
 
         if self.check_winner():
             winner = self.usuario_local if self.turn == 1 else self.usuario_oponente
@@ -212,20 +216,21 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             self.register_match(self.usuario_local, self.usuario_oponente, "draw")
 
     def send_move(self, button):
+        """Envía al oponente la jugada realizada."""
         try:
             index = [(row.index(button), col) for col, row in enumerate(self.buttons) if button in row][0]
             row, col = index
             row = 2 - row  # Reflejo vertical
             col = 2 - col  # Reflejo horizontal
-            print(f"Enviando: row={row}, col={col}")  # Depuración
-            self.socket_instance.sendall(f"{row},{col}".encode())
+            self.socket_instance.sendall(f"{row},{col}".encode())  # Envío por sockets
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo enviar el movimiento: {e}")
 
     def receive_data(self):
-        """Recibe datos del oponente, sincronizando nombres, jugadas y resultados."""
+        """Usado en un hilo para recibir datos del oponente mediante sockets."""
         try:
-            if not self.usuario_oponente:  # Ejecutar la sincronización al inicio
+            # Sincroniza nombres de los jugadores al comienzo de la conexión
+            if not self.usuario_oponente:
                 if self.is_host:
                     self.socket_instance.sendall(self.usuario_local.encode())
                     self.usuario_oponente = self.socket_instance.recv(1024).decode()
@@ -234,21 +239,19 @@ class JuegoWindow(QWidget, Ui_FormJuego):
                     self.socket_instance.sendall(self.usuario_local.encode())
                 print(f"Sincronización completada: {self.usuario_local} vs {self.usuario_oponente}")
 
-            # Mantener la conexión activa para recibir datos o resultados
+            # Escucha continua para recibir jugadas o resultados finales
             while True:
                 data = self.socket_instance.recv(1024).decode()
-                if data.startswith("RESULT:"):  # Procesar resultado si es necesario
+                if data.startswith("RESULT:"):  # Resultado final
                     self.recibir_resultado(data)
-                    break  # Detener después de recibir el resultado final
-
-                elif data:  # Datos de movimiento
+                    break  # Finalizado después del resultado
+                elif data:  # Movimiento recibido
                     row, col = map(int, data.split(","))
                     row = 2 - row  # Reflejo vertical
                     col = 2 - col  # Reflejo horizontal
                     button = self.buttons[row][col]
                     self.handle_turn(button)
-                    self.my_turn = True
-
+                    self.my_turn = True  # Actualizar turno correctamente
                 else:
                     print("El servidor/cliente cerró la conexión.")
                     break
@@ -257,11 +260,13 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             self.close_socket()
 
     def disable_all_buttons(self):
+        """Deshabilita los botones del tablero al finalizar el juego."""
         for row in self.buttons:
             for button in row:
                 button.setEnabled(False)
 
     def reset_game_action(self):
+        """Resetea el tablero para un nuevo juego."""
         self.turn = 0
         self.times = 0
         self.lblGanador.setText("")
@@ -269,13 +274,13 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             for button in row:
                 button.setEnabled(True)
                 button.setText("")
-        self.my_turn = self.is_host
+        self.my_turn = self.is_host  # Reinicia el turno según rol del jugador
 
     def check_winner(self):
-        """Verifica si hay un ganador o empate y define el flujo según sea host o cliente."""
+        """Verifica si hay un ganador o empate y realiza acciones según sea necesario."""
         winner_detected = None
 
-        # Reglas de validación de filas, columnas y diagonales
+        # Reglas para validar ganador en filas, columnas y diagonales
         for i in range(3):
             if self.buttons[i][0].text() == self.buttons[i][1].text() == self.buttons[i][2].text() != "":
                 winner_detected = self.buttons[i][0].text()
@@ -287,15 +292,14 @@ class JuegoWindow(QWidget, Ui_FormJuego):
         if self.buttons[0][2].text() == self.buttons[1][1].text() == self.buttons[2][0].text() != "":
             winner_detected = self.buttons[0][2].text()
 
-        # Regla para empate
+        # Reglas de empate
         is_draw = self.times == 9 and not winner_detected
 
-        # Solo el host realiza las acciones finales
-        if self.is_host:
+        if self.is_host:  # Sólo el host realiza acciones finales como registrar
             if winner_detected:
                 winner_name = self.usuario_local if winner_detected == "X" else self.usuario_oponente
                 self.enviar_resultado(winner_name)  # Enviar resultado al cliente
-                self.register_match(self.usuario_local, self.usuario_oponente, winner_name)  # Registrar en el WS
+                self.register_match(self.usuario_local, self.usuario_oponente, winner_name)  # Registrar en WS
             elif is_draw:
                 self.enviar_resultado("draw")  # Enviar empate al cliente
                 self.register_match(self.usuario_local, self.usuario_oponente, "draw")  # Registrar empate en el WS
@@ -303,23 +307,23 @@ class JuegoWindow(QWidget, Ui_FormJuego):
         return winner_detected or is_draw
 
     def enviar_resultado(self, resultado):
-        """Envía el resultado final del juego al cliente desde el host."""
+        """Envía el resultado del juego al oponente si eres el host."""
         try:
             if self.is_host:
                 message = f"RESULT:{resultado}"
-                self.socket_instance.sendall(message.encode())  # Enviar el resultado
-                self.mostrar_resultado(resultado)  # Mostrar en tu propia pantalla
+                self.socket_instance.sendall(message.encode())  # Enviar el resultado al cliente
+                self.mostrar_resultado(resultado)  # Mostrar localmente
         except Exception as e:
             print(f"Error al enviar el resultado: {e}")
 
     def recibir_resultado(self, message):
-        """Recibe el resultado del host y lo aplica localmente."""
+        """Recibe el resultado final desde el host."""
         if message.startswith("RESULT:"):
             resultado = message.split(":")[1]
             self.mostrar_resultado(resultado)
 
     def mostrar_resultado(self, resultado):
-        """Muestra en la interfaz el resultado final."""
+        """Actualiza la interfaz para mostrar el resultado final."""
         if resultado == "draw":
             self.lblGanador.setText("Empate")
         else:
@@ -327,9 +331,8 @@ class JuegoWindow(QWidget, Ui_FormJuego):
 
         self.disable_all_buttons()
 
-
     def close_socket(self):
-        """Cerrar el socket de forma segura."""
+        """Cierra el socket de manera segura."""
         try:
             if self.socket_instance:
                 self.socket_instance.shutdown(socket.SHUT_RDWR)
@@ -343,8 +346,7 @@ class JuegoWindow(QWidget, Ui_FormJuego):
 
 
 class LobbyWindow(QWidget):
-    """Ventana del lobby del juego."""
-
+    """Ventana del lobby, permite creación o conexión a partidas."""
     # Definimos una señal personalizada para manejar la conexión en el hilo principal
     conexion_exitosa = Signal(object)
 
@@ -425,22 +427,16 @@ class LobbyWindow(QWidget):
             QMessageBox.warning(self, "Error", "Por favor, ingrese una IP y puerto válidos en el formato IP:Puerto.")
 
     def iniciar_juego(self, socket_instance, is_host=True):
+        """Genera la ventana del juego tras una conexión exitosa."""
         try:
             if not socket_instance:
                 raise ValueError("Socket de juego no válido. La conexión no se estableció correctamente.")
 
-            # Señaliza que estás en transición hacia la ventana del juego
-            self.transitioning = True
-
             self.juego_ventana = JuegoWindow(socket_instance, is_host, self.usuario)
             self.juego_ventana.show()
             self.hide()
-
-            # Una vez que la nueva ventana se muestra completamente, desactiva el flag
-            self.transitioning = False
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo iniciar la ventana del juego: {e}")
-
 
     def obtener_interfaces_de_red(self):
         """Obtiene las interfaces de red activas con direcciones IPv4 válidas."""
