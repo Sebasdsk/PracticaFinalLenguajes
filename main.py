@@ -289,8 +289,7 @@ class LobbyWindow(QWidget):
                 self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.client_socket.connect((ip_address, port))
 
-                QMessageBox.information(self, "Cliente",
-                                        f"Conectado exitosamente al servidor:\nIP: {ip_address}\nPuerto: {port}")
+                # Redirigir directamente al juego tras conectarse exitosamente.
                 self.iniciar_juego(self.client_socket, is_host=False)
             except Exception as e:
                 QMessageBox.critical(self, "Error de Cliente", f"No se pudo conectar al servidor:\n{e}")
