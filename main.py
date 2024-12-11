@@ -173,7 +173,8 @@ class JuegoWindow(QWidget, Ui_FormJuego):
     def send_move(self, button):
         try:
             index = [(row.index(button), col) for col, row in enumerate(self.buttons) if button in row][0]
-            self.socket_instance.sendall(f"{index[0]},{index[1]}".encode())
+            if self.socket_instance:
+                self.socket_instance.sendall(f"{index[0]},{index[1]}".encode())
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo enviar el movimiento: {e}")
 
@@ -192,10 +193,13 @@ class JuegoWindow(QWidget, Ui_FormJuego):
                 else:
                     print("El servidor/cliente cerró la conexión.")
                     break
-            except Exception as e:
+            except socket.error as e:
                 print(f"Error al recibir datos: {e}")
                 break
-        self.close_socket()  # Cerrar el socket al terminar el bucle
+            except Exception as e:
+                print(f"Error inesperado al recibir datos: {e}")
+                break
+        self.close_socket()
 
     def disable_all_buttons(self):
         for row in self.buttons:
@@ -231,8 +235,13 @@ class JuegoWindow(QWidget, Ui_FormJuego):
             if self.socket_instance:
                 self.socket_instance.shutdown(socket.SHUT_RDWR)
                 self.socket_instance.close()
-        except OSError as e:
+        except socket.error as e:
             print(f"Error al cerrar el socket: {e}")
+        except Exception as e:
+            print(f"Error inesperado al cerrar el socket: {e}")
+        finally:
+            self.socket_instance = None
+
 
 class LobbyWindow(QWidget):
     """Ventana del lobby del juego."""
@@ -291,8 +300,10 @@ class LobbyWindow(QWidget):
             conn, _ = self.server_socket.accept()  # Esperamos una conexión
             # Conexión exitosa: Emitimos una señal para pasar al método iniciar_juego desde el hilo principal.
             self.conexion_exitosa.emit(conn)
-        except Exception as e:
+        except socket.error as e:
             print(f"Error al aceptar la conexión: {e}")
+        except Exception as e:
+            print(f"Error inesperado al aceptar la conexión: {e}")
 
     def unirse_a_partida(self):
         """Se conecta a un servidor."""
@@ -306,8 +317,10 @@ class LobbyWindow(QWidget):
 
                 # Redirigir directamente al juego tras conectarse exitosamente.
                 self.iniciar_juego(self.client_socket, is_host=False)
-            except Exception as e:
+            except socket.error as e:
                 QMessageBox.critical(self, "Error de Cliente", f"No se pudo conectar al servidor:\n{e}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error de Cliente", f"Error inesperado:\n{e}")
         else:
             QMessageBox.warning(self, "Error", "Por favor, ingrese una IP y puerto válidos en el formato IP:Puerto.")
 
@@ -340,12 +353,20 @@ class LobbyWindow(QWidget):
         """Cierra los sockets cuando se cierra la ventana."""
         try:
             if self.server_socket:
+                self.server_socket.shutdown(socket.SHUT_RDWR)
                 self.server_socket.close()
             if self.client_socket:
+                self.client_socket.shutdown(socket.SHUT_RDWR)
                 self.client_socket.close()
-        except Exception:
-            pass
+        except socket.error as e:
+            print(f"Error al cerrar el socket: {e}")
+        except Exception as e:
+            print(f"Error inesperado al cerrar el socket: {e}")
+        finally:
+            self.server_socket = None
+            self.client_socket = None
         event.accept()
+
 
 if __name__ == "__main__":
     import sys
