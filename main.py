@@ -3,6 +3,7 @@ import socket
 import netifaces
 import threading
 from PySide6.QtWidgets import QApplication, QWidget, QMainWindow, QMessageBox, QInputDialog
+from PySide6.QtCore import Signal, QObject
 from Interfaces.ui_login import Ui_Login
 from Interfaces.ui_menu import Ui_Menu as MenuPrincipalUI
 from Interfaces.ui_registro import Ui_FormRegistro as UiRegistro
@@ -221,6 +222,9 @@ class JuegoWindow(QWidget, Ui_FormJuego):
 class LobbyWindow(QWidget):
     """Ventana del lobby del juego."""
 
+    # Definimos una señal personalizada para manejar la conexión en el hilo principal
+    conexion_exitosa = Signal(object)
+
     def __init__(self):
         super().__init__()
         self.ui = UiLobby()
@@ -230,6 +234,9 @@ class LobbyWindow(QWidget):
         self.server_socket = None
         self.client_socket = None
         self.fixed_port = 5051
+
+        # Conexión de la señal para manejar la apertura del juego en el hilo principal
+        self.conexion_exitosa.connect(self.iniciar_juego)
 
     def crear_partida(self):
         """Inicia el servidor y espera conexiones."""
@@ -253,7 +260,8 @@ class LobbyWindow(QWidget):
                 self.server_socket.listen(1)
 
                 self.ui.lbIdGenerado.setText(f"{ip_address}:{self.fixed_port}")
-                QMessageBox.information(self, "Servidor", f"Servidor iniciado en:\nIP: {ip_address}\nPuerto: {self.fixed_port}")
+                QMessageBox.information(self, "Servidor",
+                                        f"Servidor iniciado en:\nIP: {ip_address}\nPuerto: {self.fixed_port}")
 
                 # Crear un hilo para aceptar la conexión
                 threading.Thread(target=self.aceptar_conexion, daemon=True).start()
@@ -265,11 +273,11 @@ class LobbyWindow(QWidget):
     def aceptar_conexion(self):
         """Espera una conexión de cliente y lanza la partida."""
         try:
-            conn, _ = self.server_socket.accept()
-            QMessageBox.information(self, "Conexión", "Un jugador se ha conectado. Iniciando partida...")
-            self.iniciar_juego(conn, is_host=True)
+            conn, _ = self.server_socket.accept()  # Esperamos una conexión
+            # Conexión exitosa: Emitimos una señal para pasar al método iniciar_juego desde el hilo principal.
+            self.conexion_exitosa.emit(conn)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error al aceptar la conexión: {e}")
+            print(f"Error al aceptar la conexión: {e}")
 
     def unirse_a_partida(self):
         """Se conecta a un servidor."""
@@ -281,21 +289,22 @@ class LobbyWindow(QWidget):
                 self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.client_socket.connect((ip_address, port))
 
-                QMessageBox.information(self, "Cliente", f"Conectado exitosamente al servidor:\nIP: {ip_address}\nPuerto: {port}")
+                QMessageBox.information(self, "Cliente",
+                                        f"Conectado exitosamente al servidor:\nIP: {ip_address}\nPuerto: {port}")
                 self.iniciar_juego(self.client_socket, is_host=False)
             except Exception as e:
                 QMessageBox.critical(self, "Error de Cliente", f"No se pudo conectar al servidor:\n{e}")
         else:
             QMessageBox.warning(self, "Error", "Por favor, ingrese una IP y puerto válidos en el formato IP:Puerto.")
 
-    def iniciar_juego(self, socket_instance, is_host):
+    def iniciar_juego(self, socket_instance, is_host=True):
         """Inicia la ventana del juego con el socket proporcionado."""
         try:
             if not socket_instance:
                 raise ValueError("Socket de juego no válido. La conexión no se estableció correctamente.")
             self.juego_ventana = JuegoWindow(socket_instance, is_host)
             self.juego_ventana.show()
-            self.close()
+            self.close()  # Cierra el lobby
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo iniciar la ventana del juego: {e}")
 
@@ -314,6 +323,7 @@ class LobbyWindow(QWidget):
         return interfaces
 
     def closeEvent(self, event):
+        """Cierra los sockets cuando se cierra la ventana."""
         try:
             if self.server_socket:
                 self.server_socket.close()
@@ -322,7 +332,6 @@ class LobbyWindow(QWidget):
         except Exception:
             pass
         event.accept()
-
 
 if __name__ == "__main__":
     import sys
